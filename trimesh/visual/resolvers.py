@@ -6,6 +6,7 @@ Tools to load assets referenced in meshes, like MTL files
 or texture images.
 """
 import os
+import io
 
 # URL parsing for remote resources via WebResolver
 try:
@@ -195,3 +196,56 @@ class WebResolver(Resolver):
 
         # return the bytes of the response
         return response.content
+
+
+class S3Resolver(Resolver):
+    """
+    Resolve assets from S3.
+    """
+
+    def __init__(self, bucket, key):
+        """
+        Resolve assets from S3.
+
+        Parameters
+        --------------
+        bucket : str
+          S3 bucket mesh was downloaded from
+        key : str
+          S3 key of mesh
+        """
+
+        self.bucket = bucket
+
+        # we want a base url where the mesh was located
+        self.prefix = key
+        if self.prefix[-1] != '/':
+            # clip off last item
+            self.prefix = '/'.join(self.prefix.split('/')[:-1]) + '/'
+
+    def get(self, name):
+        """
+        Get a resource from the remote site.
+
+        Parameters
+        -------------
+        name : str
+          Asset name, i.e. 'quadknot.obj.mtl'
+        """
+        # do import here to keep soft dependency
+        import boto3
+
+        # remove leading and trailing whitespace
+        name = name.strip()
+        # try to strip off filesystem crap
+        if name[:2] == "./":
+            name = name[2:]
+
+        # fetch the data from the remote url
+        client = boto3.client("s3")
+        stream = io.Bytes()
+        client.download_fileobj(self.bucket, self.prefix, stream)
+        stream.seek(0)
+
+        # return the bytes of the response
+        return stream.read()
